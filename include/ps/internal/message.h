@@ -189,6 +189,10 @@ struct Meta {
   bool push;
   /** \brief whether or not it's for SimpleApp */
   bool simple_app;
+  /* ==================================dynamic add worker====================*/
+  /* whether this is the last pull of a epoch */
+  bool last_pull;
+  /* ==================================dynamic add worker====================*/
   /** \brief the topic what the message will be sent to */
   //enum Topic { TOWORKERS, TOSERVERS, TOSCHEDULER, NONE};
   //Topic topic;

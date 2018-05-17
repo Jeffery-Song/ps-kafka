@@ -53,4 +53,8 @@ message PBMeta {
   optional bool push = 5;
   // whether or not it's for SimpleApp
   optional bool simple_app = 6 [default = false];
+  /* ==================================dynamic add worker====================*/
+  // whether or not it's the last pull
+  optional bool last_pull = 12;
+  /* ==================================dynamic add worker====================*/
 }

@@ -167,6 +167,12 @@ class Postoffice {
       return 2;//  server
     }
   }
+
+  /* dynamic add num worker */
+  void add_num_workers() {
+    num_workers_++;
+  }
+
   /** \brief Returns the number of worker nodes */
   int num_workers() const { return num_workers_; }
   /** \brief Returns the number of server nodes */

@@ -184,6 +184,12 @@ void Van::ProcessHearbeat(Message* msg) {
 
 void Van::ProcessBarrierCommand(Message* msg) {
   auto& ctrl = msg->meta.control;
+  /* ==================================dynamic add worker====================*/
+  // if (!ready_.load()) {
+  //   ready_ = true;
+  //   return;
+  // }
+  /* ==================================dynamic add worker====================*/
   if (msg->meta.request) {//scheduler counts the number
     if (barrier_count_.empty()) {
       barrier_count_.resize(8, 0);
@@ -216,6 +222,18 @@ void Van::ProcessBarrierCommand(Message* msg) {
 
 void Van::ProcessDataMsg(Message* msg) {
   // data msg
+  /* ==================================dynamic add worker====================*/
+  static std::queue<Message> msgs_wait_for_pull_reply;
+  if (Postoffice::Get()->is_server()) {  
+    if (Postoffice::IDtoRank(msg->meta.sender) >= Postoffice::Get()->num_workers()) {
+      // this is a new worker
+      CHECK(msg->meta.push == false);
+      CHECK(msg->meta.request == true);
+      msgs_wait_for_pull_reply.push(std::move(*msg));
+      return;
+    }
+  }
+  /* ==================================dynamic add worker====================*/
   CHECK_NE(msg->meta.sender, Meta::kEmpty);
   CHECK_NE(msg->meta.recver, Meta::kEmpty);
   CHECK_NE(msg->meta.app_id, Meta::kEmpty);
@@ -239,6 +257,20 @@ void Van::ProcessDataMsg(Message* msg) {
 //        }
 //    }
   obj->Accept(*msg);
+  /* ==================================dynamic add worker====================*/
+  if (Postoffice::Get()->is_server() && msg->meta.push == false && msg->meta.request == true) {  
+  // TODO: determine whether this is the last pull of one epoch
+    if (msg->meta.last_pull) {
+      while (!msgs_wait_for_pull_reply.empty()) {
+        /* TODO: do connection here */
+        Message *t = std::move(msgs_wait_for_pull_reply.front());
+        msgs_wait_for_pull_reply.pop();
+        obj->Accept(*t);
+        Postoffice::Get()->add_num_workers();
+      }
+    }
+  }
+  /* ==================================dynamic add worker====================*/
 }
 
 void Van::ProcessAddNodeCommand(Message* msg, Meta* nodes, Meta* recovery_nodes) {
@@ -268,17 +300,22 @@ void Van::ProcessAddNodeCommand(Message* msg, Meta* nodes, Meta* recovery_nodes)
   }
 }
 
+/* ==================================dynamic add worker====================*/
 void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
   if (is_scheduler_) {
+
+    // the following code is just like UpdateLocalID
     // numworker has not been changed
-    time_t t = time(NULL);
     CHECK(msg->meta.sender == Meta::kEmpty);
     CHECK_EQ(ctrl.node.size(), 1);
     node->control.node.push_back(ctrl.node[0]);
     auto& node = nodes->control.node.back();
+    // the following code is just like ProcessAddNodeCommandAtScheduler
+    time_t t = time(NULL);
     std::string node_host_ip = node.hostname + ":" + std::to_string(node.port);
     CHECK(connected_nodes_.find(node_host_ip) == connected_nodes_.end());
     CHECK_EQ(node.id, Node::kEmpty);
+    // now we only support add worker
     CEHCK(node.role == Node::WORKER);
     int id = Postoffice::WorkerRankToID(num_workers_);
     PS_VLOG(1) << "assign rank=" << id << " to node " << node.DebugString();
@@ -286,15 +323,64 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
     Postoffice::Get()->UpdateHeartbeat(node.id, t);
     connected_nodes_[node_host_ip] = id;
 
+    num_workers_++;
+    Postoffice::Get()->add_num_workers();
+
     nodes->control.cmd = Control::DYNAMIC_ADD_NODE;
     Message back;
     back.meta = *nodes;
     int recver_id = id;
-    // back.meta.recver = PostOffice
+    // recver now listen to partition 0, send it to worker group
+    back.meta.recver = PostOffice::IDtoGroupID(recver_id);
+    back.meta.timestamp = timestamp_++;
+    Send(back);
+    PS_VLOG(1) << "the scheduler is connected to "
+               << num_workers_ << " workers and " << num_servers_ << " servers";
+    
   } else {
-
+    // the new worker recvs scheduler's reply
+    // the following code is just like UpdateLocalID
+    CHECK(msg->meta.sender == kScheduler);
+    for (size_t i = 0; i < ctrl.node.size(); ++i) {
+      const auto& node = ctrl.node[i];
+      if (my_node_.hostname == node.hostname && my_node_.port == node.port) {//gbxu
+        if (getenv("DMLC_RANK") == nullptr) {
+          my_node_ = node;//update the my_node_.id
+          // debuger, to comment
+          printf("INFO:%s\n",my_node_.DebugString().c_str());
+          if(!is_scheduler_){
+            StartConsumer();//wait the consumer, or it will loss msg //gbxu
+            sleep(1);//TODO:optimization?
+          }
+          std::string rank = std::to_string(Postoffice::IDtoRank(node.id));
+#ifdef _MSC_VER
+          _putenv_s("DMLC_RANK", rank.c_str());
+#else
+          setenv("DMLC_RANK", rank.c_str(), true);
+#endif
+        }
+      }
+    }
+    // the following code is just like ProcessAddNodeCommand
+    // TODO: this seems useless???????
+    //new node send the add_node info, then scheduler will send the info back.
+    for (const auto& node : msg->meta.control.node) {
+      std::string addr_str = node.hostname + ":" + std::to_string(node.port);
+      if (connected_nodes_.find(addr_str) == connected_nodes_.end()) {//new node
+        //Connect(node);//gbxu:according the msg from scheduler, connect another workers or servers
+        connected_nodes_[addr_str] = node.id;//include mysele
+      }
+      if (!node.is_recovery && node.role == Node::SERVER) ++num_servers_;
+      if (!node.is_recovery && node.role == Node::WORKER) ++num_workers_;
+    }
+    PS_VLOG(1) << my_node_.ShortDebugString() << " is connected to others";
+    if(my_node_.id != Node::kEmpty){
+      ready_ = true;//wait until UpdateLocalID() get my_node_ id!
+      // TODO: tell up layer to pull for the first time
+    }
   }
 }
+/* ==================================dynamic add worker====================*/
 
 void Van::Start(int customer_id) {
   // get scheduler info
@@ -379,8 +465,11 @@ void Van::Start(int customer_id) {
     customer_specific_node.customer_id = customer_id;
     msg.meta.recver = kScheduler;
     /*=================================dynamic add node===========================================*/
-    msg.meta.control.cmd = Control::DYNAMIC_ADD_NODE;
-    // msg.meta.control.cmd = Control::ADD_NODE;
+    if (Environment::Get()->find("DYNAMIC_ADD_NODE") == "true") {
+      msg.meta.control.cmd = Control::DYNAMIC_ADD_NODE;
+    } else {
+      msg.meta.control.cmd = Control::ADD_NODE;
+    }
     /*=================================dynamic add node===========================================*/
     msg.meta.control.node.push_back(customer_specific_node);
     msg.meta.timestamp = timestamp_++;
@@ -503,6 +592,10 @@ void Van::PackMeta(const Meta& meta, char** meta_buf, int* buf_size) {
   pb.set_push(meta.push);
   pb.set_request(meta.request);
   pb.set_simple_app(meta.simple_app);
+
+  /* ==================================dynamic add worker====================*/
+  pb.set_last_pull(meta.last_pull);
+  /* ==================================dynamic add worker====================*/
   pb.set_customer_id(meta.customer_id);
   for (auto d : meta.data_type) pb.add_data_type(d);
   if (!meta.control.empty()) {
@@ -550,6 +643,7 @@ void Van::UnpackMeta(const char* meta_buf, int buf_size, Meta* meta) {
   meta->request = pb.request();
   meta->push = pb.push();
   meta->simple_app = pb.simple_app();
+  meta->last_pull = pb.last_pull();
   meta->body = pb.body();
   meta->customer_id = pb.customer_id();
   meta->sender =  pb.has_sender() ? pb.sender() : Meta::kEmpty;//gbxu
