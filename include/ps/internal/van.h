@@ -175,12 +175,17 @@ class Van {
     void ProcessAddNodeCommand(Message* msg, Meta* nodes, Meta* recovery_nodes);
 
     /**
+     * \brief processing logic of Dynamic AddNode message (run on each node)
+     */
+    void ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes);
+
+    /**
      * \brief processing logic of Barrier message (run on each node)
      */
     void ProcessBarrierCommand(Message* msg);
 
     /**
-     * \brief processing logic of AddNode message (run on each node)
+     * \brief processing logic of Heartbeat message (run on each node)
      */
     void ProcessHearbeat(Message* msg);
 

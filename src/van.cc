@@ -268,6 +268,34 @@ void Van::ProcessAddNodeCommand(Message* msg, Meta* nodes, Meta* recovery_nodes)
   }
 }
 
+void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
+  if (is_scheduler_) {
+    // numworker has not been changed
+    time_t t = time(NULL);
+    CHECK(msg->meta.sender == Meta::kEmpty);
+    CHECK_EQ(ctrl.node.size(), 1);
+    node->control.node.push_back(ctrl.node[0]);
+    auto& node = nodes->control.node.back();
+    std::string node_host_ip = node.hostname + ":" + std::to_string(node.port);
+    CHECK(connected_nodes_.find(node_host_ip) == connected_nodes_.end());
+    CHECK_EQ(node.id, Node::kEmpty);
+    CEHCK(node.role == Node::WORKER);
+    int id = Postoffice::WorkerRankToID(num_workers_);
+    PS_VLOG(1) << "assign rank=" << id << " to node " << node.DebugString();
+    node.id = id;
+    Postoffice::Get()->UpdateHeartbeat(node.id, t);
+    connected_nodes_[node_host_ip] = id;
+
+    nodes->control.cmd = Control::DYNAMIC_ADD_NODE;
+    Message back;
+    back.meta = *nodes;
+    int recver_id = id;
+    // back.meta.recver = PostOffice
+  } else {
+
+  }
+}
+
 void Van::Start(int customer_id) {
   // get scheduler info
   start_mu_.lock();
@@ -350,7 +378,10 @@ void Van::Start(int customer_id) {
     Node customer_specific_node = my_node_;
     customer_specific_node.customer_id = customer_id;
     msg.meta.recver = kScheduler;
-    msg.meta.control.cmd = Control::ADD_NODE;
+    /*=================================dynamic add node===========================================*/
+    msg.meta.control.cmd = Control::DYNAMIC_ADD_NODE;
+    // msg.meta.control.cmd = Control::ADD_NODE;
+    /*=================================dynamic add node===========================================*/
     msg.meta.control.node.push_back(customer_specific_node);
     msg.meta.timestamp = timestamp_++;
     Send(msg);
@@ -448,6 +479,10 @@ void Van::Receiving() {
         ProcessBarrierCommand(&msg);
       } else if (ctrl.cmd == Control::HEARTBEAT) {
         ProcessHearbeat(&msg);
+      /* ================================= dynamic add node =====================*/
+      } else if (ctrl.cmd == Control::DYNAMIC_ADD_NODE) {
+        ProcessDynamicAddNodeCommand(&msg, &nodes);
+      /* ================================= dynamic add node =====================*/
       } else {
         LOG(WARNING) << "Drop unknown typed message " << msg.DebugString();
       }
