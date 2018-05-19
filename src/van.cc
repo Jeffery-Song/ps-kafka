@@ -263,7 +263,7 @@ void Van::ProcessDataMsg(Message* msg) {
     if (msg->meta.last_pull) {
       while (!msgs_wait_for_pull_reply.empty()) {
         /* TODO: do connection here */
-        Message *t = std::move(msgs_wait_for_pull_reply.front());
+        Message t = std::move(msgs_wait_for_pull_reply.front());
         msgs_wait_for_pull_reply.pop();
         obj->Accept(*t);
         Postoffice::Get()->add_num_workers();
@@ -307,8 +307,8 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
     // the following code is just like UpdateLocalID
     // numworker has not been changed
     CHECK(msg->meta.sender == Meta::kEmpty);
-    CHECK_EQ(ctrl.node.size(), 1);
-    node->control.node.push_back(ctrl.node[0]);
+    CHECK_EQ(msg->meta.control.node.size(), 1);
+    nodes->control.node.push_back(msg->meta.control.node[0]);
     auto& node = nodes->control.node.back();
     // the following code is just like ProcessAddNodeCommandAtScheduler
     time_t t = time(NULL);
@@ -316,7 +316,7 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
     CHECK(connected_nodes_.find(node_host_ip) == connected_nodes_.end());
     CHECK_EQ(node.id, Node::kEmpty);
     // now we only support add worker
-    CEHCK(node.role == Node::WORKER);
+    CHECK(node.role == Node::WORKER);
     int id = Postoffice::WorkerRankToID(num_workers_);
     PS_VLOG(1) << "assign rank=" << id << " to node " << node.DebugString();
     node.id = id;
@@ -331,7 +331,7 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
     back.meta = *nodes;
     int recver_id = id;
     // recver now listen to partition 0, send it to worker group
-    back.meta.recver = PostOffice::IDtoGroupID(recver_id);
+    back.meta.recver = Postoffice::IDtoGroupID(recver_id);
     back.meta.timestamp = timestamp_++;
     Send(back);
     PS_VLOG(1) << "the scheduler is connected to "
@@ -341,8 +341,8 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
     // the new worker recvs scheduler's reply
     // the following code is just like UpdateLocalID
     CHECK(msg->meta.sender == kScheduler);
-    for (size_t i = 0; i < ctrl.node.size(); ++i) {
-      const auto& node = ctrl.node[i];
+    for (size_t i = 0; i < msg->meta.control.node.size(); ++i) {
+      const auto& node = msg->meta.control.node[i];
       if (my_node_.hostname == node.hostname && my_node_.port == node.port) {//gbxu
         if (getenv("DMLC_RANK") == nullptr) {
           my_node_ = node;//update the my_node_.id
