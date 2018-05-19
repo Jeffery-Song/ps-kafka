@@ -265,7 +265,7 @@ void Van::ProcessDataMsg(Message* msg) {
         /* TODO: do connection here */
         Message t = std::move(msgs_wait_for_pull_reply.front());
         msgs_wait_for_pull_reply.pop();
-        obj->Accept(*t);
+        obj->Accept(t);
         Postoffice::Get()->add_num_workers();
       }
     }
