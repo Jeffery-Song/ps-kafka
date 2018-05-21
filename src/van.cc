@@ -643,7 +643,9 @@ void Van::UnpackMeta(const char* meta_buf, int buf_size, Meta* meta) {
   meta->request = pb.request();
   meta->push = pb.push();
   meta->simple_app = pb.simple_app();
+  /* ==================================dynamic add worker====================*/
   meta->last_pull = pb.last_pull();
+  /* ==================================dynamic add worker====================*/
   meta->body = pb.body();
   meta->customer_id = pb.customer_id();
   meta->sender =  pb.has_sender() ? pb.sender() : Meta::kEmpty;//gbxu

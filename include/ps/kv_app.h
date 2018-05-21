@@ -211,8 +211,12 @@ class KVWorker : public SimpleApp {
             SArray<Val>* vals,
             SArray<int>* lens = nullptr,
             int cmd = 0,
-            const Callback& cb = nullptr) {
-    return Pull_(keys, vals, lens, cmd, cb);
+            const Callback& cb = nullptr,
+  /* ==================================dynamic add worker====================*/
+            bool end_of_batch = false) {
+
+    return Pull_(keys, vals, lens, cmd, cb, end_of_batch);
+  /* ==================================dynamic add worker====================*/
   }
   using SlicedKVs = std::vector<std::pair<bool, KVPairs<Val>>>;
   /**
@@ -238,8 +242,12 @@ class KVWorker : public SimpleApp {
    * \brief internal pull, C/D can be either SArray or std::vector
    */
   template <typename C, typename D>
+
+    /* ==================================dynamic add worker====================*/
   int Pull_(const SArray<Key>& keys, C* vals, D* lens,
-            int cmd, const Callback& cb);
+            int cmd, const Callback& cb, bool end_of_batch = false);
+    /* ==================================dynamic add worker====================*/
+
   /**
    * \brief add a callback for a request. threadsafe.
    * @param cb callback
@@ -262,7 +270,12 @@ class KVWorker : public SimpleApp {
    * @param push whether or not it is a push request
    * @param cmd command
    */
-  void Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs);
+
+
+    /* ==================================dynamic add worker====================*/
+  void Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs, bool end_of_batch = false);
+    /* ==================================dynamic add worker====================*/
+
   /** \brief internal receive handle */
   void Process(const Message& msg);
   /** \brief default kv slicer */
@@ -505,7 +518,7 @@ void KVWorker<Val>::DefaultSlicer(
 }
 
 template <typename Val>
-void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs) {
+void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs, bool end_of_batch = false) {
   // slice the message
   SlicedKVs sliced;
 
@@ -533,6 +546,10 @@ void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& 
     msg.meta.head        = cmd;
     msg.meta.timestamp   = timestamp;
     msg.meta.recver      = Postoffice::Get()->ServerRankToID(i);
+  /* ==================================dynamic add worker====================*/
+    msg.meta.last_pull = end_of_batch;
+  /* ==================================dynamic add worker====================*/
+
     const auto& kvs = s.second;
     if (kvs.keys.size()) {
       msg.AddData(kvs.keys);
@@ -590,7 +607,9 @@ void KVWorker<Val>::RunCallback(int timestamp) {
 template <typename Val>
 template <typename C, typename D>
 int KVWorker<Val>::Pull_(
-    const SArray<Key>& keys, C* vals, D* lens, int cmd, const Callback& cb) {
+  /* ==================================dynamic add worker====================*/
+    const SArray<Key>& keys, C* vals, D* lens, int cmd, const Callback& cb, bool end_of_batch = false) {
+  /* ==================================dynamic add worker====================*/
 
   int ts = obj_->NewRequest(kServerGroup);
   AddCallback(ts, [this, ts, keys, vals, lens, cb]() mutable {
