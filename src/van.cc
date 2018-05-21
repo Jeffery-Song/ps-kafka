@@ -261,6 +261,7 @@ void Van::ProcessDataMsg(Message* msg) {
   if (Postoffice::Get()->is_server() && msg->meta.push == false && msg->meta.request == true) {  
   // TODO: determine whether this is the last pull of one epoch
     if (msg->meta.last_pull) {
+      std::cerr << "is this server? received a msg with last_pull true!" << std::endl;
       while (!msgs_wait_for_pull_reply.empty()) {
         /* TODO: do connection here */
         Message t = std::move(msgs_wait_for_pull_reply.front());

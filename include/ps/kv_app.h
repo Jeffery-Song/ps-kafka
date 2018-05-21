@@ -518,7 +518,7 @@ void KVWorker<Val>::DefaultSlicer(
 }
 
 template <typename Val>
-void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs, bool end_of_batch = false) {
+void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& kvs, bool end_of_batch) {
   // slice the message
   SlicedKVs sliced;
 
@@ -608,7 +608,7 @@ template <typename Val>
 template <typename C, typename D>
 int KVWorker<Val>::Pull_(
   /* ==================================dynamic add worker====================*/
-    const SArray<Key>& keys, C* vals, D* lens, int cmd, const Callback& cb, bool end_of_batch = false) {
+    const SArray<Key>& keys, C* vals, D* lens, int cmd, const Callback& cb, bool end_of_batch) {
   /* ==================================dynamic add worker====================*/
 
   int ts = obj_->NewRequest(kServerGroup);
