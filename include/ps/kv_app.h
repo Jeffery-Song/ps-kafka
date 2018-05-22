@@ -675,7 +675,9 @@ int KVWorker<Val>::Pull_(
   //if(lens != nullptr && !lens->empty()){
   //    kvs.lens.CopyFrom(lens->data(),lens->size());//lens
   //}
-  Send(ts, false, cmd, kvs);
+  /* ==================================dynamic add worker====================*/
+  Send(ts, false, cmd, kvs, end_of_batch);
+  /* ==================================dynamic add worker====================*/
   return ts;
 }
 

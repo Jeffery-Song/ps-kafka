@@ -261,6 +261,7 @@ void Van::ProcessDataMsg(Message* msg) {
   if (Postoffice::Get()->is_server() && msg->meta.push == false && msg->meta.request == true) {  
   // TODO: determine whether this is the last pull of one epoch
     if (msg->meta.last_pull) {
+
       std::cerr << "is this server? received a msg with last_pull true!" << std::endl;
       while (!msgs_wait_for_pull_reply.empty()) {
         /* TODO: do connection here */
@@ -304,7 +305,7 @@ void Van::ProcessAddNodeCommand(Message* msg, Meta* nodes, Meta* recovery_nodes)
 /* ==================================dynamic add worker====================*/
 void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
   if (is_scheduler_) {
-
+    std::cerr << "scheduler receives dynamic add node\n";
     // the following code is just like UpdateLocalID
     // numworker has not been changed
     CHECK(msg->meta.sender == Meta::kEmpty);
@@ -341,6 +342,7 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
   } else {
     // the new worker recvs scheduler's reply
     // the following code is just like UpdateLocalID
+    std::cerr << "new worker receives dynamic add node back\n";
     CHECK(msg->meta.sender == kScheduler);
     for (size_t i = 0; i < msg->meta.control.node.size(); ++i) {
       const auto& node = msg->meta.control.node[i];
@@ -466,7 +468,8 @@ void Van::Start(int customer_id) {
     customer_specific_node.customer_id = customer_id;
     msg.meta.recver = kScheduler;
     /*=================================dynamic add node===========================================*/
-    if (Environment::Get()->find("DYNAMIC_ADD_NODE") == "true") {
+    if (Environment::Get()->find("DYNAMIC_ADD_NODE") && (std::string(Environment::Get()->find("DYNAMIC_ADD_NODE")) == "true")) {
+      std::cerr << "start with dynamic add node, sending msg to scheduler\n";
       msg.meta.control.cmd = Control::DYNAMIC_ADD_NODE;
     } else {
       msg.meta.control.cmd = Control::ADD_NODE;

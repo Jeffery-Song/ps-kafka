@@ -225,10 +225,14 @@ protected:
 
     int SendMsg(Message& msg) override {
         std::lock_guard<std::mutex> lk(mu_);
-
+        if (Environment::Get()->find("DYNAMIC_ADD_NODE")) {
+            std::cerr << "new node send msg to " << msg.meta.recver << "\n";
+            std::cerr << msg.DebugString();
+        }
         //topic partition
         msg.meta.sender = my_node_.id;
         if (msg.meta.last_pull == true) {
+
             std::cerr << "sending a msg with last_pull true" << std::endl;
         }
         Topic topic = Postoffice::IDtoTopic(msg.meta.recver);
@@ -350,6 +354,9 @@ protected:
         debug.Out();
 #endif
         rd_kafka_message_destroy(rkmessage);
+        if (Environment::Get()->find("DYNAMIC_ADD_NODE")) {
+            std::cerr << "new node recv msg from " << msg->meta.sender << "\n";
+        }
         return recv_bytes;
     }
     /* pack message into send buf by xiaoniu */
