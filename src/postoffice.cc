@@ -24,6 +24,7 @@ Postoffice::Postoffice() {
   is_server_ = role == "server";
   is_scheduler_ = role == "scheduler";
   verbose_ = GetEnv("PS_VERBOSE", 0);
+  curr_epoch = -1;
 }
 
 void Postoffice::Start(int customer_id, const char* argv0, const bool do_barrier) {
@@ -160,6 +161,7 @@ const std::vector<Range>& Postoffice::GetServerKeyRanges() {
   server_key_ranges_mu_.lock();
   if (server_key_ranges_.empty()) {
     for (int i = 0; i < num_servers_; ++i) {
+      std::cerr << "push back [" << kMaxKey / num_servers_ * i << ", " << kMaxKey / num_servers_ * (i+1) << ")\n";
       server_key_ranges_.push_back(Range(
           kMaxKey / num_servers_ * i,
           kMaxKey / num_servers_ * (i+1)));

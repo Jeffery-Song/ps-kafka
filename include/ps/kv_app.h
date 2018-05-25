@@ -474,6 +474,7 @@ void KVWorker<Val>::DefaultSlicer(
   for (size_t i = 0; i < n; ++i) {
     if (i == 0) {
       pos[0] = std::lower_bound(begin, end, ranges[0].begin()) - begin;
+      // std::cerr << "begin=" << *begin << "pos[0]=" << pos[0] << ", range[0].begin=" << *(ranges[0].begin());
       begin += pos[0];
     } else {
       CHECK_EQ(ranges[i-1].end(), ranges[i].begin());
@@ -481,10 +482,12 @@ void KVWorker<Val>::DefaultSlicer(
     size_t len = std::lower_bound(begin, end, ranges[i].end()) - begin;
     begin += len;
     pos[i+1] = pos[i] + len;
+    // std::cerr << "begin=" << *begin << ", pos[" << i + 1 << "]=" << pos[i+1] << ", range[i].end=" << *(ranges[i].end());
 
     // don't send it to servers for empty kv
     sliced->at(i).first = (len != 0);
   }
+  // std::cerr << "\n";
   CHECK_EQ(pos[n], send.keys.size());
   if (send.keys.empty()) return;
 
@@ -533,11 +536,17 @@ void KVWorker<Val>::Send(int timestamp, bool push, int cmd, const KVPairs<Val>& 
   if ((size_t)skipped == sliced.size()) {
     RunCallback(timestamp);
   }
-
+  // if (end_of_batch) {
+    // std::cerr << "sliced with size " << sliced.size() << "\n";
+  // }
   for (size_t i = 0; i < sliced.size(); ++i) {
     // each server
     const auto& s = sliced[i];
-    if (!s.first) continue;
+    if (!s.first) {
+      // if (end_of_batch)
+        // std::cerr << "idx " << i << " is continued in kv sliced\n";
+      continue;
+    }
     Message msg;
     msg.meta.app_id = obj_->app_id();
     msg.meta.customer_id = obj_->customer_id();

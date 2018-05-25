@@ -224,11 +224,18 @@ void Van::ProcessDataMsg(Message* msg) {
   // data msg
   /* ==================================dynamic add worker====================*/
   static std::queue<Message> msgs_wait_for_pull_reply;
+  static int new_worker_count = 0;
+  static int curr_epoch = 0;
   if (Postoffice::Get()->is_server()) {  
-    if (Postoffice::IDtoRank(msg->meta.sender) >= Postoffice::Get()->num_workers()) {
-      // this is a new worker
+    if (Postoffice::IDtoRank(msg->meta.sender) >= Postoffice::Get()->num_workers() && msg->meta.simple_app == false) {
+      // this is a new worker's pull
+      std::cerr << "server detacted a new worker\n";
+      // std::cerr << msg->DebugString() << "\n";
       CHECK(msg->meta.push == false);
       CHECK(msg->meta.request == true);
+      if (Postoffice::IDtoRank(msg->meta.sender) >= Postoffice::Get()->num_workers() + new_worker_count) {
+        new_worker_count = Postoffice::IDtoRank(msg->meta.sender) + 1 - Postoffice::Get()->num_workers();
+      }
       msgs_wait_for_pull_reply.push(std::move(*msg));
       return;
     }
@@ -259,17 +266,34 @@ void Van::ProcessDataMsg(Message* msg) {
   obj->Accept(*msg);
   /* ==================================dynamic add worker====================*/
   if (Postoffice::Get()->is_server() && msg->meta.push == false && msg->meta.request == true) {  
-  // TODO: determine whether this is the last pull of one epoch
-    if (msg->meta.last_pull) {
+  // determine whether this is the last pull of one epoch
+    if (msg->meta.last_pull && new_worker_count != 0) {
 
       std::cerr << "is this server? received a msg with last_pull true!" << std::endl;
+      // tell other old worker change num worker
+      Message back;
+      back.meta.control.cmd = Control::DYNAMIC_ADD_NODE;
+      back.meta.timestamp = curr_epoch;
+      back.meta.app_id = Postoffice::Get()->num_workers() + new_worker_count;
+      std::cerr << "server now send back dynamicaddnode with appid " << back.meta.app_id << "\n";
+      back.meta.recver = 0;
+      for (int i = 0; i < Postoffice::Get()->num_workers() + new_worker_count; i++) {
+        back.meta.recver = Postoffice::WorkerRankToID(i);
+        Send(back);
+      }
+      for (int i = 0; i < new_worker_count; i++) Postoffice::Get()->add_num_workers();
+
+      new_worker_count = 0;
       while (!msgs_wait_for_pull_reply.empty()) {
         /* TODO: do connection here */
         Message t = std::move(msgs_wait_for_pull_reply.front());
         msgs_wait_for_pull_reply.pop();
         obj->Accept(t);
-        Postoffice::Get()->add_num_workers();
       }
+    }
+    if (msg->meta.last_pull && Postoffice::IDtoRank(msg->meta.sender) == 0) {
+      std::cerr << "server knows this is the last pull of epoch " << curr_epoch << "\n";
+      curr_epoch++;
     }
   }
   /* ==================================dynamic add worker====================*/
@@ -340,8 +364,23 @@ void Van::ProcessDynamicAddNodeCommand(Message* msg, Meta* nodes) {
                << num_workers_ << " workers and " << num_servers_ << " servers";
     
   } else {
-    // the new worker recvs scheduler's reply
+    if (my_node_.id != Node::kEmpty) {
+      // a worker recvs ADD_NODE
+      // count num of worker in the ctrl.node
+      std::cerr << "worker recv add node from server, appid is " << msg->meta.app_id << " epo is " << msg->meta.timestamp << "\n";
+      Postoffice::Get()->set_num_workers(msg->meta.app_id);
+      Postoffice::Get()->set_curr_epoch(msg->meta.timestamp);
+      // int cnt = 0;
+      // for (auto & nd : msg->meta.control.node) {
+      //   if (nd.role == Node::WORKER) cnt++;
+      // }
+      // if (cnt > Postoffice::Get()->num_workers()) {
+      //   Postoffice::Get()->set_num_workers(cnt);
+      // }
+      return;
+    }
     // the following code is just like UpdateLocalID
+    // the new worker recvs scheduler's reply
     std::cerr << "new worker receives dynamic add node back\n";
     CHECK(msg->meta.sender == kScheduler);
     for (size_t i = 0; i < msg->meta.control.node.size(); ++i) {

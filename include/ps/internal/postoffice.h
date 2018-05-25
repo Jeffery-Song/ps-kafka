@@ -172,6 +172,15 @@ class Postoffice {
   void add_num_workers() {
     num_workers_++;
   }
+  /* dynamic add num worker */
+  void set_num_workers(int num) {
+    num_workers_ = num;
+  }
+
+  int curr_epoch;
+  void set_curr_epoch(int epo) {
+    curr_epoch = epo;
+  }
 
   /** \brief Returns the number of worker nodes */
   int num_workers() const { return num_workers_; }
