@@ -236,7 +236,7 @@ protected:
         msg.meta.sender = my_node_.id;
         if (msg.meta.last_pull == true) {
 
-            std::cerr << "sending a msg with last_pull true" << std::endl;
+            // std::cerr << "sending a msg with last_pull true" << std::endl;
         }
         Topic topic = Postoffice::IDtoTopic(msg.meta.recver);
         int partition = Postoffice::IDtoPartition(msg.meta.recver);

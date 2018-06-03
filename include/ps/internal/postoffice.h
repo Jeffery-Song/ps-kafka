@@ -181,6 +181,7 @@ class Postoffice {
   void set_curr_epoch(int epo) {
     curr_epoch = epo;
   }
+  int batch_per_epoch = -1;
 
   /** \brief Returns the number of worker nodes */
   int num_workers() const { return num_workers_; }
